@@ -1,9 +1,10 @@
 import { Router } from "express";
-import { UserSignInZodSchema, UserSignUpZodSchema } from "../zod/types.js";
-import {User} from "../db/models.db.js"
+import { UserSignInZodSchema, UserSignUpZodSchema, UserUpdateZodSchema } from "../zod/types.js";
+import {Account, User} from "../db/models.db.js"
 import { DbConnect } from "../db/db.js";
 import jwt from "jsonwebtoken"
 import bcrypt from "bcrypt"
+import { authMiddleware } from "../middlewares/user.auth.js";
 
 const userRouter=Router();
 
@@ -30,6 +31,7 @@ userRouter.post('/signup',async (req,res)=>{
     
     try{
     const response=await User.create(userdata)
+    await Account.create({userid:response._id,balance:1+Math.random()*10000})
     if(response){
         res.status(200).json({message:"created the user"})
         return
@@ -75,24 +77,71 @@ userRouter.post("/signin",async(req,res)=>{
     if(user){
         const isValidPassword=await bcrypt.compare(userdata.password,user.password)
         if(isValidPassword){
-            const token=await jwt.sign({username:user.username},process.env.JWT_SECRET)
+            const token= jwt.sign({email:user.email,userid:user._id},process.env.JWT_SECRET)
             res.status(200).json({message:"User logged in",
                 token:token
             })
             return
         }
         else{
-            res.status(404).json({message:"Password is incorrect"})
+            res.status(401).json({message:"Password is incorrect"})
             return
         }
     }else{
-        res.status(404).json({message:"user not found"})
+        res.status(401).json({message:"user not found"})
         return
     }
 
     
     
     
+})
+
+userRouter.put("/update",authMiddleware,async (req,res)=>{
+    const userdata={
+        password:req.body.password,
+        fullname:req.body.fullname,
+    }
+    try{
+    UserUpdateZodSchema.parse(userdata)
+    }catch(error){
+        console.log(error)
+    }
+    userdata.password=await bcrypt.hash(userdata.password,10)
+    console.log(req.email)
+
+    const updatedUser=await User.findOneAndUpdate({email:req.email},{password:userdata.password,
+        fullname:userdata.fullname})
+        console.log(updatedUser)
+    if(updatedUser){
+        res.status(200).json({message:"User details updated"})
+        return
+    }
+    else{
+        res.status(400).json({message:"User not updated"})
+        return
+    }
+    
+    
+})
+
+userRouter.get("/bulk",async (req,res)=>{
+    const filter=req.query.filter || ""
+    const users=await User.find({
+        fullname:{
+            "$regex":filter
+        }
+    })
+
+    res.json({
+        user: users.map(user=>({
+            id:user._id,
+            email:user.email,
+            fullname:user.fullname
+        })
+            
+        )
+    })
 })
 
 

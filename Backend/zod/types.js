@@ -29,3 +29,12 @@ export const UserSignInZodSchema=z.object({
         
     
 })
+export const UserUpdateZodSchema=z.object({
+    password:
+        z.string().optional(),
+        
+    fullname:
+        z.string().optional()
+        
+    
+})
